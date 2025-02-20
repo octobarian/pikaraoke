@@ -87,7 +87,7 @@ class Karaoke:
         hide_url=False,
         hide_notifications=False,
         hide_splash_screen=False,
-        high_quality=False,
+        high_quality=True,
         volume=0.85,
         normalize_audio=False,
         complete_transcode_before_play=False,
@@ -135,7 +135,7 @@ class Karaoke:
         )
         self.hide_splash_screen = hide_splash_screen
         self.download_path = download_path
-        self.high_quality = self.get_user_preference("high_quality") or high_quality
+        self.high_quality = high_quality
         self.splash_delay = self.get_user_preference("splash_delay") or int(splash_delay)
         self.volume = self.get_user_preference("volume") or volume
         self.normalize_audio = self.get_user_preference("normalize_audio") or normalize_audio
@@ -311,19 +311,31 @@ class Karaoke:
     def get_search_results(self, textToSearch):
         logging.info("Searching YouTube for: " + textToSearch)
         num_results = 10
-        yt_search = 'ytsearch%d:"%s"' % (num_results, unidecode(textToSearch))
+
+        # Check if the search string contains Korean characters
+        contains_korean = any("\uac00" <= char <= "\ud7af" for char in textToSearch)
+
+        # Use unidecode only if the text does not contain Korean characters
+        if contains_korean:
+            yt_search = f'ytsearch{num_results}:"{textToSearch}"'
+        else:
+            yt_search = f'ytsearch{num_results}:"{unidecode(textToSearch)}"'
+
         cmd = [self.youtubedl_path, "-j", "--no-playlist", "--flat-playlist", yt_search]
         logging.debug("Youtube-dl search command: " + " ".join(cmd))
+
         try:
             output = subprocess.check_output(cmd).decode("utf-8", "ignore")
             logging.debug("Search results: " + output)
             rc = []
+
             for each in output.split("\n"):
                 if len(each) > 2:
                     j = json.loads(each)
-                    if (not "title" in j) or (not "url" in j):
+                    if "title" not in j or "url" not in j:
                         continue
                     rc.append([j["title"], j["url"], j["id"]])
+
             return rc
         except Exception as e:
             logging.debug("Error while executing search: " + str(e))
@@ -331,6 +343,9 @@ class Karaoke:
 
     def get_karaoke_search_results(self, songTitle):
         return self.get_search_results(songTitle + " karaoke")
+    
+    def get_noraebang_search_results(self, songTitle):
+        return self.get_search_results(songTitle + " 노래방")
 
     def send_notification(self, message, color="primary"):
         # Color should be bulma compatible: primary, warning, success, danger

@@ -23,15 +23,24 @@ search_bp = Blueprint("search", __name__)
 def search():
     k = get_karaoke_instance()
     site_name = get_site_name()
+    
     if "search_string" in request.args:
         search_string = request.args["search_string"]
-        if "non_karaoke" in request.args and request.args["non_karaoke"] == "true":
+        non_karaoke = request.args.get("non_karaoke", "false").lower() == "true"
+
+        # Check if search string contains Korean characters
+        contains_korean = any("\uac00" <= char <= "\ud7af" for char in search_string)
+
+        if non_karaoke:
             search_results = k.get_search_results(search_string)
+        elif contains_korean:
+            search_results = k.get_noraebang_search_results(search_string)
         else:
             search_results = k.get_karaoke_search_results(search_string)
     else:
         search_string = None
         search_results = None
+
     return render_template(
         "search.html",
         site_title=site_name,
@@ -40,6 +49,7 @@ def search():
         search_results=search_results,
         search_string=search_string,
     )
+
 
 
 @search_bp.route("/autocomplete")
