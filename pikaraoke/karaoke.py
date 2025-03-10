@@ -486,30 +486,36 @@ class Karaoke:
         try:
             fr = FileResolver(file_path)
         except Exception as e:
-            logging.error("Error resolving file: " + str(e))
+            logging.error(f"Error resolving file: {str(e)}")
             self.queue.pop(0)
             return False
 
         if self.complete_transcode_before_play or not requires_transcoding:
-            # This route is used for streaming the full video file, and includes more
-            # accurate headers for safari and other browsers
             stream_url_path = f"/stream/full/{fr.stream_uid}"
         else:
-            # This route is used for streaming the video file in chunks, only works on chrome
             stream_url_path = f"/stream/{fr.stream_uid}"
 
+        is_transcoding_complete = False
+        is_buffering_complete = False
+
         if not requires_transcoding:
-            # simply copy file path to the tmp directory and the stream is ready
-            shutil.copy(file_path, fr.output_file)
-            max_retries = 5
-            while max_retries > 0:
-                if os.path.exists(fr.output_file):
-                    is_transcoding_complete = True
-                    break
-                max_retries -= 1
-                time.sleep(1)
-            if max_retries == 0:
-                logging.debug(f"Copying file failed: {fr.output_file}")
+            # Handle copying the file safely with better exception handling
+            try:
+                shutil.copy(file_path, fr.output_file)
+                for _ in range(5):  # Retry max 5 times
+                    if os.path.exists(fr.output_file):
+                        is_transcoding_complete = True
+                        break
+                    time.sleep(1)
+                else:
+                    logging.error(f"Copying file failed: {fr.output_file}")
+                    self.end_song()
+                    return False
+            except Exception as e:
+                logging.error(f"Error copying file: {e}")
+                self.end_song()
+                return False
+
         else:
             self.kill_ffmpeg()
             ffmpeg_cmd = build_ffmpeg_cmd(
@@ -521,59 +527,52 @@ class Karaoke:
             )
             self.ffmpeg_process = ffmpeg_cmd.run_async(pipe_stderr=True, pipe_stdin=True)
 
-            # ffmpeg outputs everything useful to stderr for some insane reason!
-            # prevent reading stderr from being a blocking action
+            # FFmpeg log reader (asynchronous)
             self.ffmpeg_log = Queue()
             t = Thread(target=enqueue_output, args=(self.ffmpeg_process.stderr, self.ffmpeg_log))
             t.daemon = True
             t.start()
 
+            transcode_max_retries = 2500  # Configurable retries
             output_file_size = 0
-            transcode_max_retries = 2500  # Transcode completion max: approx 2 minutes
 
-            is_transcoding_complete = False
-            is_buffering_complete = False
-
-            # Transcoding readiness polling loop
-            while True:
+            while transcode_max_retries > 0:
                 self.log_ffmpeg_output()
-                # Check if the ffmpeg process has exited
-                if self.ffmpeg_process.poll() is not None:
-                    exitcode = self.ffmpeg_process.poll()
+
+                # Check if FFmpeg process has exited
+                exitcode = self.ffmpeg_process.poll()
+                if exitcode is not None:  # Process finished
                     if exitcode != 0:
-                        logging.error(
-                            f"FFMPEG transcode exited with nonzero exit code ending: {exitcode}. Skipping track"
-                        )
+                        logging.error(f"FFMPEG transcode exited with error code {exitcode}. Skipping track.")
                         self.end_song()
-                        break
+                        return False
                     else:
                         is_transcoding_complete = True
                         output_file_size = os.path.getsize(fr.output_file)
                         logging.debug(f"Transcoding complete. File size: {output_file_size}")
                         break
-                # Check if the file has buffered enough to start playback
+
+                # Buffering check
                 try:
                     output_file_size = os.path.getsize(fr.output_file)
-                    if not self.complete_transcode_before_play:
-                        is_buffering_complete = output_file_size > self.buffer_size * 1000
-                        if is_buffering_complete:
-                            logging.debug(f"Buffering complete. File size: {output_file_size}")
-                            break
-                except:
-                    pass
-                # Prevent infinite loop if playback never starts
-                if transcode_max_retries <= 0:
-                    logging.error("Max retries reached trying to play song. Skipping track")
-                    self.end_song()
-                    break
+                    if not self.complete_transcode_before_play and output_file_size > self.buffer_size * 2000:  # Adjust buffer size dynamically
+                        is_buffering_complete = True
+                        logging.debug(f"Buffering complete. File size: {output_file_size}")
+                        break
+                except FileNotFoundError:
+                    logging.warning(f"Output file not found yet: {fr.output_file}")
+
                 transcode_max_retries -= 1
                 time.sleep(0.05)
 
-        # Check if the stream is ready to play. Determined by:
-        # - completed transcoding
-        # - buffered file size being greater than a threshold
+            if transcode_max_retries <= 0:
+                logging.error("Max retries reached trying to play song. Skipping track")
+                self.end_song()
+                return False
+
+        # ✅ Stream Ready
         if is_transcoding_complete or is_buffering_complete:
-            logging.debug(f"Stream ready!")
+            logging.debug("Stream ready!")
             self.now_playing = self.filename_from_path(file_path)
             self.now_playing_filename = file_path
             self.now_playing_transpose = semitones
@@ -584,18 +583,22 @@ class Karaoke:
             self.queue.pop(0)
             self.update_now_playing_hash()
             self.update_queue_hash()
-            # Pause until the stream is playing
+
+            # Ensure stream starts
             transcode_max_retries = 100
-            while self.is_playing == False and transcode_max_retries > 0:
-                time.sleep(0.1)  # prevents loop from trying to replay track
+            while not self.is_playing and transcode_max_retries > 0:
+                time.sleep(0.1)
                 transcode_max_retries -= 1
+
             if self.is_playing:
                 logging.debug("Stream is playing")
             else:
-                logging.error(
-                    "Stream was not playable! Run with debug logging to see output. Skipping track"
-                )
+                logging.error("Stream was not playable! Skipping track.")
                 self.end_song()
+                return False
+
+        return True
+
 
     def kill_ffmpeg(self):
         logging.debug("Killing ffmpeg process")

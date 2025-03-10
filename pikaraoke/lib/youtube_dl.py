@@ -57,12 +57,13 @@ def build_ytdl_download_command(
 ):
     dl_path = download_path + "%(title)s---%(id)s.%(ext)s"
     file_quality = (
-        "bestvideo[ext!=webm][height<=1080]+bestaudio[ext!=webm]/best[ext!=webm]"
+        "bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best"
         if high_quality
-        else "mp4"
+        else "best[ext=mp4]/best"
     )
     cmd = [youtubedl_path, "-f", file_quality, "-o", dl_path]
     if youtubedl_proxy:
         cmd += ["--proxy", youtubedl_proxy]
     cmd += [video_url]
     return cmd
+
