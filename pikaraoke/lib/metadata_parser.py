@@ -586,9 +586,14 @@ def regex_tidy(filename: str) -> str:
         title = _strip_attribution_and_noise(name)
         name = f"{title} - {artist}"
     else:
-        # Strip trailing parenthesised/bracketed content
-        name = re.sub(r"\s*\([^)]*\)\s*$", "", name)
-        name = re.sub(r"\s*\[[^\]]*\]\s*$", "", name)
+        # Strip trailing parenthesised/bracketed content only if ASCII (noise like "Official Video")
+        # Preserve non-ASCII content such as Korean artist names or title annotations
+        name = re.sub(
+            r"\s*\(([^)]*)\)\s*$", lambda m: "" if m.group(1).isascii() else m.group(0), name
+        )
+        name = re.sub(
+            r"\s*\[([^\]]*)\]\s*$", lambda m: "" if m.group(1).isascii() else m.group(0), name
+        )
         # Iteratively strip trailing noise patterns
         for noise_pat in TRAILING_NOISE_PATTERNS:
             prev = None

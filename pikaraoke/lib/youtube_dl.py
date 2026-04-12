@@ -144,8 +144,6 @@ def build_ytdl_download_command(
         dl_path,
         "-S",
         "vcodec:h264",
-        "--compat-options",
-        "filename-sanitization",
     ]
     cmd = yt_dlp_cmd + args + _js_runtime_args()
     if youtubedl_proxy:
