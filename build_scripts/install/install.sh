@@ -140,6 +140,14 @@ elif [ "$OS_TYPE" == "Linux" ]; then
         export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     fi
 
+    # Persist ~/.local/bin to PATH in shell config so pikaraoke command works after install
+    for SHELL_RC in "$HOME/.bashrc" "$HOME/.profile"; do
+        if [ -f "$SHELL_RC" ] && ! grep -q '\.local/bin' "$SHELL_RC"; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+            echo "Added ~/.local/bin to PATH in $SHELL_RC"
+        fi
+    done
+
     if [ $SKIP_DENO -eq 0 ] && ! command -v deno &> /dev/null; then
         echo "Installing Deno..."
         curl -fsSL https://deno.land/install.sh | sh
@@ -236,13 +244,17 @@ EOF
             chmod +x "$target"
         }
 
-        if [ -d "$HOME/Desktop" ]; then
-            create_linux_desktop "PiKaraoke" "" "PiKaraoke.desktop"
-            create_linux_desktop "PiKaraoke (headless)" "--headless" "PiKaraoke-headless.desktop"
-            echo "Linux shortcuts created on Desktop."
-        else
-            echo "Warning: Desktop directory not found. Skipping shortcut creation."
+        DESKTOP_DIR="$HOME/Desktop"
+        if command -v xdg-user-dir &> /dev/null; then
+            XDG_DESKTOP="$(xdg-user-dir DESKTOP 2>/dev/null)"
+            if [ -n "$XDG_DESKTOP" ] && [ "$XDG_DESKTOP" != "$HOME" ]; then
+                DESKTOP_DIR="$XDG_DESKTOP"
+            fi
         fi
+        mkdir -p "$DESKTOP_DIR"
+        create_linux_desktop "PiKaraoke" "" "PiKaraoke.desktop"
+        create_linux_desktop "PiKaraoke (headless)" "--headless" "PiKaraoke-headless.desktop"
+        echo "Linux shortcuts created in $DESKTOP_DIR."
     fi
 fi
 
