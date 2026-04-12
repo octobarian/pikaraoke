@@ -46,8 +46,8 @@ dev = [
 pikaraoke = "pikaraoke.app:main"
 
 [project.urls]
-Homepage = "https://github.com/vicwomg/pikaraoke"
-Repository = "https://github.com/vicwomg/pikaraoke"
+Homepage = "https://github.com/octobarian/pikaraoke"
+Repository = "https://github.com/octobarian/pikaraoke"
 
 [build-system]
 requires = ["hatchling"]

@@ -160,13 +160,13 @@ if uv tool list | grep -q "pikaraoke"; then
     if [ "$LOCAL" == "y" ]; then
         uv tool install --force .
     else
-        uv tool upgrade pikaraoke
+        uv tool install --force git+https://github.com/octobarian/pikaraoke
     fi
 else
     if [ "$LOCAL" == "y" ]; then
         uv tool install .
     else
-        uv tool install pikaraoke
+        uv tool install git+https://github.com/octobarian/pikaraoke
     fi
 fi
 
@@ -177,7 +177,7 @@ if [ $INSTALL_SHORTCUTS -eq 1 ]; then
     SHARE_DIR="$HOME/.local/share/pikaraoke"
     mkdir -p "$SHARE_DIR"
     ICON_PATH="$SHARE_DIR/logo.icns"
-    ICON_URL="https://raw.githubusercontent.com/vicwomg/pikaraoke/refs/heads/master/pikaraoke/static/icons/logo.icns"
+    ICON_URL="https://raw.githubusercontent.com/octobarian/pikaraoke/refs/heads/master/pikaraoke/static/icons/logo.icns"
     if [ ! -f "$ICON_PATH" ]; then
         curl -fsSL "$ICON_URL" -o "$ICON_PATH" || echo "Warning: Could not download icon"
     fi
