@@ -14,6 +14,7 @@ docker-compose.yml
 /.idea/
 .coverage
 .claude/
+CLAUDE.md
 /logs
 
 # Briefcase build artifacts
